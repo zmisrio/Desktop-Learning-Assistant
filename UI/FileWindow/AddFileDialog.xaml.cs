@@ -1,4 +1,6 @@
-﻿using System;
+﻿using DesktopLearningAssistant.TagFile;
+using DesktopLearningAssistant.TagFile.Model;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -12,71 +14,161 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using Panuon.UI.Silver;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 
 namespace UI.FileWindow
 {
     /// <summary>
     /// AddFileDialog.xaml 的交互逻辑
     /// </summary>
-    public partial class AddFileDialog : Window
+    public partial class AddFileDialog : WindowX, INotifyPropertyChanged
     {
         public AddFileDialog(IEnumerable<string> allTagNames)
         {
             InitializeComponent();
             DataContext = this;
             foreach (string tagName in allTagNames)
+                FileTags.Add(new SelectableFileTag(tagName));
+        }
+
+        public AddFileDialog(string filepath)
+        {
+            InitializeComponent();
+            DataContext = this;
+            Filepath = filepath;
+            UpdateRecommendation(Filepath).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// 给标签列表绑定数据用的集合
+        /// </summary>
+        public ObservableCollection<SelectableFileTag> FileTags { get; }
+            = new ObservableCollection<SelectableFileTag>();
+
+        private Visibility recommendVisibility = Visibility.Collapsed;
+        public Visibility RecommendVisibility
+        {
+            get => recommendVisibility;
+            private set
             {
-                TagListForComboBox.Add(new SelectableFileTag
-                {
-                    TagName = tagName,
-                    IsSelected = false
-                });
+                recommendVisibility = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string mfilepath;
+        public string Filepath
+        {
+            get => mfilepath;
+            set
+            {
+                mfilepath = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string tagsStr;
+        public string TagsStr
+        {
+            get => tagsStr;
+            set
+            {
+                tagsStr = value;
+                OnPropertyChanged();
             }
         }
 
         /// <summary>
-        /// 结果：文件路径
+        /// 执行添加文件
         /// </summary>
-        public string Filepath { get; private set; }
+        public async Task AddFileAsync()
+        {
+            //Get the result
+            string filepath = System.IO.Path.GetFullPath(Filepath);
+            bool asShortcut = asShortcutRadio.IsChecked.GetValueOrDefault(true);
+            var tagNames = new List<string>();
+            foreach (var stag in FileTags)
+                if (stag.IsSelected)
+                    tagNames.Add(stag.TagName);
 
-        /// <summary>
-        /// 结果：是否使用快捷方式
-        /// </summary>
-        public bool AsShortcut { get; private set; }
+            FileItem fileItem = asShortcut ? await service.AddShortcutToRepoAsync(filepath)
+                                           : await service.MoveFileToRepoAsync(filepath);
+            foreach (string tagName in tagNames)
+            {
+                Tag tag = await service.GetTagByNameAsync(tagName);
+                if (tag != null)
+                    await service.AddRelationAsync(tag, fileItem);
+            }
+        }
 
-        /// <summary>
-        /// 结果：要添加的标签
-        /// </summary>
-        public ICollection<string> TagNames { get; private set; }
+        private async Task UpdateRecommendation(string filepath)
+        {
+            List<Tag> tags;
+            try
+            {
+                tags = await service.RecommendTagAsync(filepath);
+            }
+            catch (Exception e)
+            {
+                MessageBox.Show(e.Message, "读取文件时出错");
+                return;
+            }
+            var showSet = new HashSet<string>();
+            foreach (Tag tag in tags.Take(MAX_RECOMMEND))
+                showSet.Add(tag.TagName);
+            foreach (var stag in FileTags)
+                stag.IsSelected = showSet.Contains(stag.TagName);
 
-        /// <summary>
-        /// 给下拉框绑定数据用的列表
-        /// </summary>
-        public ObservableCollection<SelectableFileTag> TagListForComboBox { get; }
-            = new ObservableCollection<SelectableFileTag>();
+            if (tags.Count == 0)
+                RecommendVisibility = Visibility.Collapsed;
+            else
+            {
+                RecommendVisibility = Visibility.Visible;
+                var sb = new StringBuilder();
+                bool isfirst = true;
+                foreach (Tag tag in tags.Take(MAX_RECOMMEND))
+                {
+                    if (isfirst)
+                        isfirst = false;
+                    else
+                        sb.Append(", ");
+                    sb.Append(tag.TagName);
+                }
+                TagsStr = sb.ToString();
+            }
+        }
 
         /// <summary>
         /// 确定
         /// </summary>
-        private void ConfirmBtn_Click(object sender, RoutedEventArgs e)
+        private async void ConfirmBtn_Click(object sender, RoutedEventArgs e)
         {
-            string filepath = filepathTxtbox.Text;
-            if (filepath == null || filepath.Trim().Length == 0)
+            if (Filepath == null || Filepath.Trim().Length == 0)
             {
                 DialogResult = false;
+                Close();
             }
             else
             {
+                if (!System.IO.File.Exists(Filepath))
+                {
+                    MessageBox.Show($"文件 {Filepath} 不存在", "文件不存在");
+                    return;
+                }
+                try
+                {
+                    await AddFileAsync();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message, "添加文件时出错");
+                    return;
+                }
                 DialogResult = true;
-                //Set the result.
-                Filepath = System.IO.Path.GetFullPath(filepath);
-                AsShortcut = asShortcutRadio.IsChecked.GetValueOrDefault(true);
-                TagNames = new List<string>();
-                foreach (var stag in TagListForComboBox)
-                    if (stag.IsSelected)
-                        TagNames.Add(stag.TagName);
+                Close();
             }
-            Close();
         }
 
         /// <summary>
@@ -91,7 +183,7 @@ namespace UI.FileWindow
         /// <summary>
         /// 选择文件
         /// </summary>
-        private void SelectFileBtn_Click(object sender, RoutedEventArgs e)
+        private async void SelectFileBtn_Click(object sender, RoutedEventArgs e)
         {
             using (var dialog = new System.Windows.Forms.OpenFileDialog())
             {
@@ -99,33 +191,21 @@ namespace UI.FileWindow
                 var result = dialog.ShowDialog();
                 if (result == System.Windows.Forms.DialogResult.OK)
                 {
-                    string filepath = dialog.FileName;
-                    filepathTxtbox.Text = filepath;
+                    Filepath = dialog.FileName;
+                    await UpdateRecommendation(Filepath);
                 }
             }
         }
 
-        private void TagComboBox_DropDownClosed(object sender, EventArgs e)
-        {
-            var sb = new StringBuilder();
-            bool isfirst = true;
-            foreach (var stag in TagListForComboBox)
-            {
-                if (stag.IsSelected)
-                {
-                    if (isfirst)
-                        isfirst = false;
-                    else
-                        sb.Append(", ");
-                    sb.Append(stag.TagName);
-                }
-            }
-            tagTxt.Text = sb.ToString();
-        }
+        private readonly ITagFileService service = TagFileService.GetService();
 
-        private void EditTagBtn_Click(object sender, RoutedEventArgs e)
-        {
-            tagComboBox.IsDropDownOpen = !tagComboBox.IsDropDownOpen;
-        }
+        public event PropertyChangedEventHandler PropertyChanged;
+        private void OnPropertyChanged([CallerMemberName] string name = null)
+            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+        /// <summary>
+        /// 最大推荐数
+        /// </summary>
+        private const int MAX_RECOMMEND = 5;
     }
 }

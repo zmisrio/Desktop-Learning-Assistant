@@ -7,6 +7,7 @@ using DesktopLearningAssistant.TagFile.Model;
 using DesktopLearningAssistant.TagFile.Expression;
 using Microsoft.EntityFrameworkCore;
 using System.IO;
+using DesktopLearningAssistant.TagFile.Extraction;
 
 namespace DesktopLearningAssistant.TagFile
 {
@@ -254,12 +255,23 @@ namespace DesktopLearningAssistant.TagFile
 
         public async Task UpdateFileRelationAsync(FileItem fileItem, IEnumerable<Tag> newTags)
         {
+            var newTagIds = new HashSet<int>(); //用户设置的标签
+            foreach (Tag newTag in newTags)
+                newTagIds.Add(newTag.TagId);
+            var oldTagIds = new HashSet<int>(); //原有的标签
             var oldRelations = await context.Relations.Where(
                 relation => relation.FileItemId == fileItem.FileItemId).ToListAsync();
             foreach (var oldRelation in oldRelations)
-                context.Relations.Remove(oldRelation);
+            {
+                oldTagIds.Add(oldRelation.TagId);
+                //若不在用户设置的标签中，则移除
+                if (!newTagIds.Contains(oldRelation.TagId))
+                    context.Relations.Remove(oldRelation);
+            }
+            //若不在原有标签中，则添加
             foreach (Tag tag in newTags)
-                await AddRelationAsync(tag, fileItem);
+                if (!oldTagIds.Contains(tag.TagId))
+                    await AddRelationAsync(tag, fileItem);
             await context.SaveChangesAsync();
         }
 
@@ -484,6 +496,33 @@ namespace DesktopLearningAssistant.TagFile
 #if DISPOSE_CONTEXT_IMMEDIATELY
             }
 #endif
+        }
+
+        public async Task<List<Tag>> RecommendTagAsync(string filepath)
+        {
+            var result = new List<Tag>();
+            var resultSet = new HashSet<string>();
+            var tagNames = new List<string>();
+            (await TagListAsync()).ForEach(tag => tagNames.Add(tag.TagName));
+            var counter = new WordCounter(tagNames);
+            string filename = System.IO.Path.GetFileName(filepath);
+            List<string> lst = counter.OrderedListFromText(filename);
+            if (lst.Count > 0)
+            {
+                //出现在文件名中次数最多的那个单词排第一位
+                result.Add(await GetTagByNameAsync(lst[0]));
+                resultSet.Add(lst[0]);
+            }
+            lst = await Task.Run(() => counter.OrderedListFromFile(filepath));
+            foreach(string tagName in lst)
+            {
+                if(!resultSet.Contains(tagName))
+                {
+                    result.Add(await GetTagByNameAsync(tagName));
+                    resultSet.Add(tagName);
+                }
+            }
+            return result;
         }
 
         #endregion

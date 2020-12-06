@@ -163,6 +163,7 @@
     <Compile Include="MainWindow\Model\MainWindowVM.cs" />
     <Compile Include="MainWindow\Model\RelativeFileItem.cs" />
     <Compile Include="FileWindow\SelectableFileTag.cs" />
+    <Compile Include="MainWindow\TomatoClockManager.cs" />
     <Compile Include="SettingsWindow\NewWhiteList.xaml.cs">
       <DependentUpon>NewWhiteList.xaml</DependentUpon>
     </Compile>
@@ -170,13 +171,13 @@
     <Compile Include="TomatoWindow\AllTasksWindow.xaml.cs">
       <DependentUpon>AllTasksWindow.xaml</DependentUpon>
     </Compile>
+    <Compile Include="TomatoWindow\Model\TaskItem.cs" />
     <Compile Include="TomatoWindow\MyProgressbar\Progressbar_xy.xaml.cs">
       <DependentUpon>Progressbar_xy.xaml</DependentUpon>
     </Compile>
     <Compile Include="TomatoWindow\NewTaskWindow.xaml.cs">
       <DependentUpon>NewTaskWindow.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Process\TimeCount.cs" />
     <Compile Include="SettingsWindow\Settings.xaml.cs">
       <DependentUpon>Settings.xaml</DependentUpon>
     </Compile>
@@ -309,6 +310,12 @@
   <ItemGroup>
     <Resource Include="Image\add-in-filewin.png" />
     <Resource Include="Image\refresh-in-filewin.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Image\Minus.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Image\go.png" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">

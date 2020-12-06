@@ -17,6 +17,7 @@ using System.Windows.Shapes;
 using Panuon.UI.Silver;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Diagnostics;
 
 namespace UI.FileWindow
 {
@@ -25,6 +26,10 @@ namespace UI.FileWindow
     /// </summary>
     public partial class AddFileDialog : WindowX, INotifyPropertyChanged
     {
+        /// <summary>
+        /// 构造函数
+        /// </summary>
+        /// <param name="allTagNames">所有标签</param>
         public AddFileDialog(IEnumerable<string> allTagNames)
         {
             InitializeComponent();
@@ -33,12 +38,20 @@ namespace UI.FileWindow
                 FileTags.Add(new SelectableFileTag(tagName));
         }
 
+        /// <summary>
+        /// 构造函数
+        /// </summary>
+        /// <param name="filepath">文件路径</param>
         public AddFileDialog(string filepath)
         {
             InitializeComponent();
             DataContext = this;
             Filepath = filepath;
-            UpdateRecommendation(Filepath).ConfigureAwait(false);
+            Task.Run(async () =>
+            {
+                await FillTagsFromServiceAsync();;
+                await UpdateRecommendationAsync(Filepath);
+            }).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -103,7 +116,7 @@ namespace UI.FileWindow
             }
         }
 
-        private async Task UpdateRecommendation(string filepath)
+        private async Task UpdateRecommendationAsync(string filepath)
         {
             List<Tag> tags;
             try
@@ -138,6 +151,29 @@ namespace UI.FileWindow
                 }
                 TagsStr = sb.ToString();
             }
+        }
+
+        /// <summary>
+        /// 从标签名集合填充所有标签列表，在 UI 线程执行
+        /// </summary>
+        private void FillTagsFromNamesInUiThread(IEnumerable<string> allTagNames)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                foreach (string tagName in allTagNames)
+                    FileTags.Add(new SelectableFileTag(tagName));
+            });
+        }
+
+        /// <summary>
+        /// 查询并填充所有标签列表
+        /// </summary>
+        private async Task FillTagsFromServiceAsync()
+        {
+            var tagNames = new List<string>();
+            (await service.TagListAsync()).ForEach(tag => tagNames.Add(tag.TagName));
+            tagNames.Sort();
+            FillTagsFromNamesInUiThread(tagNames);
         }
 
         /// <summary>
@@ -192,7 +228,7 @@ namespace UI.FileWindow
                 if (result == System.Windows.Forms.DialogResult.OK)
                 {
                     Filepath = dialog.FileName;
-                    await UpdateRecommendation(Filepath);
+                    await UpdateRecommendationAsync(Filepath);
                 }
             }
         }

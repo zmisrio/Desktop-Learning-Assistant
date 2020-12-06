@@ -1,4 +1,5 @@
 ﻿using DesktopLearningAssistant.Configuration;
+using Panuon.UI.Silver;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,17 +14,15 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using UI.SettingsWindow;
-using DesktopLearningAssistant.TimeStatistic;
-using DesktopLearningAssistant.TimeStatistic.Model;
 
 namespace UI
 {
     /// <summary>
     /// Settings.xaml 的交互逻辑
     /// </summary>
-    public partial class Settings : Window
+    public partial class Settings : WindowX
     {
-        private SettingsWindowVM viewModel;
+        private readonly SettingsWindowVM viewModel;
 
         public Settings()
         {
@@ -75,18 +74,22 @@ namespace UI
                 // 更新数据
                 configService.TTConfig.WhiteLists.Add(newWhiteListName, new List<string>());
                 viewModel.UpdateWhiteListKey();
-                WhiteListKeyComboBox.GetBindingExpression(ComboBox.ItemsSourceProperty).UpdateSource();
-                WhiteListKeyComboBox.SelectedItem = newWhiteList.WhiteListName;
                 viewModel.UpdateWhiteListValue(newWhiteList.WhiteListName);
 
-                // 刷新控件
-                
+                // 更新控件
+                WhiteListKeyComboBox.ItemsSource = viewModel.WhiteListKeyList;
+                WhiteListKeyComboBox.SelectedIndex = WhiteListKeyComboBox.Items.Count - 1;  // 选择新的
+                WhiteListKeyComboBox.Items.Refresh();
                 WhiteListValueListView.Items.Refresh();
             }
+
+            MessageBox.Show("添加成功");
         }
 
         private void DeleteWhiteListBtn_Click(object sender, RoutedEventArgs e)
         {
+            if (WhiteListKeyComboBox.SelectedItem == null)
+                return;
             string selectedKey = WhiteListKeyComboBox.SelectedItem.ToString();
             ConfigService configService = ConfigService.GetConfigService();
 
@@ -96,11 +99,17 @@ namespace UI
             viewModel.UpdateWhiteListValue();
 
             // 刷新控件
-            RefreshControls();
+            WhiteListKeyComboBox.ItemsSource = viewModel.WhiteListKeyList;
+            WhiteListKeyComboBox.Items.Refresh();
+            WhiteListValueListView.Items.Refresh();
+
+            MessageBox.Show("删除成功");
         }
 
         private void SaveWhiteListBtn_Click(object sender, RoutedEventArgs e)
         {
+            if (WhiteListKeyComboBox.SelectedItem == null)
+                return;
             string selectedKey = WhiteListKeyComboBox.SelectedItem.ToString();
             List<string> selectedValues = new List<string>();
             foreach (Software software in viewModel.WhiteListValueList)
@@ -112,6 +121,8 @@ namespace UI
 
             ConfigService configService = ConfigService.GetConfigService();
             configService.TTConfig.WhiteLists[selectedKey] = selectedValues;        // 更新专注白名单
+
+            MessageBox.Show("保存成功");
         }
 
         private void WhiteListKey_SelectionChanged(object sender, SelectionChangedEventArgs e)
